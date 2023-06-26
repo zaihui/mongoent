@@ -1,7 +1,7 @@
 package go_mongo
 
 import (
-	user1 "cc/go-mongo/user"
+	"cc/go-mongo/user"
 	"context"
 	"fmt"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -14,6 +14,7 @@ import (
 func TestGenerate(t *testing.T) {
 	GetStructsFromGoFile("/Users/zh/sdk/go1.16/demo/go-mongo/model.go")
 }
+
 func TestQueryUserInfo(t *testing.T) {
 
 	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
@@ -29,8 +30,8 @@ func TestQueryUserInfo(t *testing.T) {
 	newClient := NewClient(Driver(*client))
 
 	all, err := newClient.User.SetDBName("my_mongo").Query().Where(
-		user1.FindUserByUserName("ccc"),
-		user1.FindUserByAge(2),
+		user.AgeEQ(int(2)),
+		user.UserNameRegex("c*"),
 	).All(ctx)
 	if err != nil {
 		log.Fatal(err)

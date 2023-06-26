@@ -42,6 +42,7 @@ func GetStructsFromGoFile(fileName string) {
 	}
 	createClient(fileNameList)
 	createConfig()
+	//createOperator()
 
 }
 
@@ -78,6 +79,43 @@ func createDirectory(dirName string) error {
 		}
 	}
 	return nil
+}
+
+//func createOperator() {
+//	err := writeConstantsToFile("operator.go", generateOperator())
+//	if err != nil {
+//		fmt.Println("Error writing constants to file:", err)
+//		os.Exit(1)
+//	}
+//
+//}
+
+//	func generateOperator() []byte {
+//		builder := strings.Builder{}
+//		builder.WriteString("package go_mongo\n\n")
+//
+//		builder.WriteString("var ComparisonOperators = map[string][]string{\n")
+//
+//		// 添加字段类型和比较操作符的映射
+//		addMapping(&builder, "int", []string{"$eq", "$ne", "$gt", "$lt", "$gte", "$lte"})
+//		addMapping(&builder, "string", []string{"$eq", "$ne", "$regex"})
+//		addMapping(&builder, "bool", []string{"$eq", "$ne"})
+//		// 添加其他字段类型和相应的比较操作符...
+//
+//		builder.WriteString("}\n")
+//
+//		return []byte(builder.String())
+//
+// }
+func addMapping(builder *strings.Builder, fieldType string, operators []string) {
+	builder.WriteString(fmt.Sprintf("\t\"%s\": []string{", fieldType))
+	for i, op := range operators {
+		builder.WriteString(fmt.Sprintf("\"%s\"", op))
+		if i < len(operators)-1 {
+			builder.WriteString(", ")
+		}
+	}
+	builder.WriteString("},\n")
 }
 
 func getStructsFromFile(filename string) ([]*ast.StructType, []string) {
@@ -132,7 +170,6 @@ func generateConstants(fileName string, fields []FieldInfo) ([]byte, error) {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("package %s\n\n", strings.ToLower(fileName)))
 	builder.WriteString("import \"go.mongodb.org/mongo-driver/bson\"\n")
-	//builder.WriteString(generateQueryStruct(fileName))
 	builder.WriteString("const (")
 	builder.WriteString(fmt.Sprintf("%sMongo = \"%s\"\n", fileName, ToSnakeCase(fileName)))
 	for _, field := range fields {
@@ -140,6 +177,7 @@ func generateConstants(fileName string, fields []FieldInfo) ([]byte, error) {
 	}
 	builder.WriteString(")\n")
 	builder.WriteString(generateFindFunction(fileName, fields))
+	builder.WriteString(generatePredicate(fileName))
 
 	src, err := format.Source([]byte(builder.String()))
 	if err != nil {
@@ -148,11 +186,14 @@ func generateConstants(fileName string, fields []FieldInfo) ([]byte, error) {
 	return src, nil
 }
 
+func generatePredicate(typeName string) string {
+	return fmt.Sprintf(
+		"type %sPredicate func(*bson.D)", typeName)
+}
+
 func generateQuery(structName string) []byte {
 	clientCode := "package go_mongo\n\n"
-	//	"context"
-	//	"go-mongo/user"
-	//	"go.mongodb.org/mongo-driver/bson"
+
 	clientCode += fmt.Sprintf("import (\n")
 	clientCode += fmt.Sprintf("\t\"context\"\n")
 	clientCode += fmt.Sprintf("\t\"cc/go-mongo/%s\"\n", strings.ToLower(structName))
@@ -161,49 +202,29 @@ func generateQuery(structName string) []byte {
 
 	clientCode += fmt.Sprintf("type %sQuery struct {\n", structName)
 	clientCode += fmt.Sprintf("\tconfig\n")
-	clientCode += fmt.Sprintf("\tConditions bson.M\n")
-	clientCode += fmt.Sprintf("\t\tdbName string\n\n")
+	clientCode += fmt.Sprintf("\tPredicates []%s.%sPredicate\n", strings.ToLower(structName), structName)
+	clientCode += fmt.Sprintf("\tdbName string\n\n")
 	clientCode += fmt.Sprintf("}\n")
 
-	clientCode += fmt.Sprintf("func (uq *%sQuery) Where(ps ...bson.M)*%sQuery{\n", structName, structName)
+	clientCode += fmt.Sprintf("func (uq *%sQuery) Where(ps ...%s.%sPredicate)*%sQuery{\n", structName, strings.ToLower(structName), structName, structName)
+	//clientCode += fmt.Sprintf("\tfilter := bson.D{}\n")
 	clientCode += fmt.Sprintf("\tfor _, p := range ps {\n")
-	clientCode += fmt.Sprintf("\t\tfor s, v := range p {\n")
-	clientCode += fmt.Sprintf("\t\t\tuq.Conditions[s] = v\n")
-	clientCode += fmt.Sprintf("\t\t}\n")
+	clientCode += fmt.Sprintf("\t\tuq.Predicates = append(uq.Predicates, p)\n")
 	clientCode += fmt.Sprintf("\t}\n")
 	clientCode += fmt.Sprintf("\treturn uq\n")
 	clientCode += fmt.Sprintf("}\n")
 
-	// 生成All方法
-	//func (uq *UserQuery) All(ctx context.Context) ([]*User, error) {
-	//	cur, err := uq.Database(uq.dbName).Collection(user.UserMongo).Find(ctx, uq.Conditions)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	defer cur.Close(ctx)
-	//	temp := make([]*User, 0, 0)
-	//	// 遍历查询结果
-	//	for cur.Next(ctx) {
-	//		var u User // 指定的结构体类型
-	//		err = cur.Decode(&u)
-	//		if err != nil {
-	//			return nil, err
-	//		}
-	//		temp = append(temp, &u)
-	//	}
-	//
-	//	if err = cur.Err(); err != nil {
-	//		return nil, err
-	//	}
-	//	return temp, nil
-	//}
-
 	clientCode += fmt.Sprintf("func (uq *%sQuery) All(ctx context.Context)([]*%s,error) {\n", structName, structName)
-	clientCode += fmt.Sprintf("\tcur, err := uq.Database(uq.dbName).Collection(%s.%sMongo).Find(ctx, uq.Conditions)\n", strings.ToLower(structName), structName)
+	clientCode += fmt.Sprintf("\tfilter := bson.D{}\n")
+	clientCode += fmt.Sprintf("\tfor _, p := range uq.Predicates {\n")
+	clientCode += fmt.Sprintf("\t\tp(&filter)\n")
+	clientCode += fmt.Sprintf("\t}\n")
+	clientCode += fmt.Sprintf("\tcur, err := uq.Database(uq.dbName).Collection(%s.%sMongo).Find(ctx, filter)\n", strings.ToLower(structName), structName)
 	clientCode += fmt.Sprintf("\tif err != nil {\n")
 	clientCode += fmt.Sprintf("\t\treturn nil, err\n")
 	clientCode += fmt.Sprintf("\t}\n")
 	clientCode += fmt.Sprintf("\tdefer cur.Close(ctx)\n")
+	// todo:修改引用的包
 	clientCode += fmt.Sprintf("\ttemp := make([]*%s, 0, 0)\n", structName)
 	clientCode += fmt.Sprintf("\tfor cur.Next(ctx) {\n")
 	clientCode += fmt.Sprintf("\t\tvar u %s\n", structName)
@@ -225,28 +246,54 @@ func generateQuery(structName string) []byte {
 
 func generateFindFunction(structName string, fields []FieldInfo) string {
 	var function string
+
 	for _, field := range fields {
-		function += fmt.Sprintf("func Find%sBy", structName)
-		function += fmt.Sprintf("%s(%s %s) bson.M {\n", field.Name, ConvertToCamelCase(field.JSONName), field.Type)
-		function += fmt.Sprintf("\treturn bson.M{%sField: %s}", field.Name, ConvertToCamelCase(field.JSONName))
-		function += "}\n\n"
+		function += getFindFunctionTemplate(structName, field, "")
+		// todo:根据字段类型生成对应的比较符号
+		if v, ok := ComparisonOperators[field.Type]; ok {
+			for _, s := range v {
+				function += getFindFunctionTemplate(structName, field, s)
+			}
+		}
 	}
 	return function
 }
 
+func getFindFunctionTemplate(structName string, field FieldInfo, op string) string {
+
+	builder := strings.Builder{}
+	builder.WriteString(fmt.Sprintf("func %s%s(v %s) %sPredicate {\n", field.Name, OpSplit(op), field.Type, structName))
+	builder.WriteString("\treturn func(d *bson.D) {\n")
+	builder.WriteString(fmt.Sprintf("\t\t*d = append(*d, bson.E{\n"))
+	builder.WriteString(fmt.Sprintf("\t\t\tKey:   %sField,\n", field.Name))
+	if op == "" {
+		op = Eq
+	}
+	builder.WriteString(fmt.Sprintf("\t\t\tValue: bson.M{\"%s\": v},\n", op))
+	builder.WriteString("\t\t})\n")
+	builder.WriteString("\t}\n")
+	builder.WriteString("}\n")
+
+	return builder.String()
+
+}
+
 func generateClientCode(structNameList []string) []byte {
-	clientCode := fmt.Sprintf("package %s\n\n", strings.ToLower("go_mongo"))
-	clientCode += fmt.Sprintf("import \"go.mongodb.org/mongo-driver/bson\"\n\n")
-	clientCode += fmt.Sprintf("type Client struct {\n")
+	packageCode := fmt.Sprintf("package %s\n\n", strings.ToLower("go_mongo"))
+	//clientCode += fmt.Sprintf("import \"go.mongodb.org/mongo-driver/bson\"\n\n")
+	importCode := "import (\n"
+	clientCode := fmt.Sprintf("type Client struct {\n")
 	clientCode += "\tconfig\n"
 	initFuncStr := "func (c *Client) init(){\n"
 	for _, field := range structNameList {
+		importCode += fmt.Sprintf("\t\"cc/go-mongo/%s\"\n", strings.ToLower(field))
 		clientCode += fmt.Sprintf("\t%s *%sClient\n", field, field)
 		initFuncStr += fmt.Sprintf("\tc.%s = New%sClient(c.config)\n", field, field)
 	}
+	importCode += ")\n"
 	initFuncStr += "}\n"
 	clientCode += "}\n\n"
-	clientCode += initFuncStr
+	clientCode = packageCode + importCode + "\n" + clientCode + initFuncStr
 	clientCode += fmt.Sprintf("func NewClient(opts ...Option) *Client {\n")
 	clientCode += fmt.Sprintf("\tcfg := config{}\n")
 	clientCode += fmt.Sprintf("\tcfg.options(opts...)\n")
@@ -262,40 +309,21 @@ func generateClientCode(structNameList []string) []byte {
 		clientCode += "\tdbName string\n"
 		clientCode += "}\n"
 
-		clientCode += fmt.Sprintf("func (c *%sClient)SetDBName(dbName string)*%sClient{", field, field)
+		clientCode += fmt.Sprintf("func (c *%sClient)SetDBName(dbName string)*%sClient{\n", field, field)
 		clientCode += fmt.Sprintf("\tc.dbName=dbName\n")
 		clientCode += fmt.Sprintf("\treturn c\n")
 		clientCode += fmt.Sprintf("}\n")
-
-		// init func
-		// func (c *Client) init() {
-		//	c.User = NewUser(c.config)
-		//	c.UserInfo = NewUserInfo(c.config)
-		//}
-
-		// func NewClient(opts ...Option) *Client {
-		//	cfg := config{}
-		//	cfg.options(opts...)
-		//	client := &Client{config: cfg}
-		//	client.init()
-		//	return client
-		//}
 
 		//new field client
 		clientCode += fmt.Sprintf("func New%sClient(c config) *%sClient {\n", field, field)
 		clientCode += fmt.Sprintf("\treturn &%sClient{ config: c }\n", field)
 		clientCode += "}\n"
 
-		// query
-		//func (c *UserClient) Query() *UserQuery {
-		//	return &UserQuery{
-		//	config: c.config,
-		//}
-		//}
 		clientCode += fmt.Sprintf("func(c *%sClient) Query() *%sQuery {\n", field, field)
 		clientCode += fmt.Sprintf("\treturn &%sQuery{ \n", field)
 		clientCode += fmt.Sprintf("\t\tconfig: c.config,\n")
-		clientCode += fmt.Sprintf("\t\tConditions: bson.M{},\n")
+		clientCode += fmt.Sprintf("\t\tPredicates: []%s.%sPredicate{},\n", strings.ToLower(field), field)
+
 		clientCode += fmt.Sprintf("\t\tdbName: c.dbName,\n")
 		clientCode += fmt.Sprintf("\t}\n")
 		clientCode += "}\n"
@@ -305,28 +333,6 @@ func generateClientCode(structNameList []string) []byte {
 }
 
 func generateConfig() []byte {
-	//import (
-	//	"go.mongodb.org/mongo-driver/mongo"
-	//)
-	//
-	//type config struct {
-	//	mongo.Client
-	//}
-	//
-	//type Option func(*config)
-	//
-	//func (c *config) options(opts ...Option) {
-	//	for _, opt := range opts {
-	//		opt(c)
-	//	}
-	//}
-	//
-	//// Driver configures the client driver.
-	//func Driver(driver mongo.Client) Option {
-	//	return func(c *config) {
-	//	c.Client = driver
-	//}
-	//}
 	clientCode := fmt.Sprintf("package %s\n\n", strings.ToLower("go_mongo"))
 	clientCode += fmt.Sprintf("import \"go.mongodb.org/mongo-driver/mongo\"\n\n")
 	clientCode += fmt.Sprintf("type config struct {\n")

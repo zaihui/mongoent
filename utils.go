@@ -23,3 +23,16 @@ func ToSnakeCase(input string) string {
 	snakeCase = strings.TrimPrefix(snakeCase, "_")
 	return snakeCase
 }
+
+func OpSplit(s string) string {
+
+	split := strings.Split(s, "$")
+	if len(split) < 2 {
+		return ""
+	}
+	if split[1] == "regex" {
+		return "Regex"
+	}
+
+	return strings.ToUpper(split[1])
+}
