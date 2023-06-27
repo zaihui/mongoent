@@ -198,13 +198,33 @@ func generateQuery(structName string) []byte {
 	clientCode += fmt.Sprintf("\t\"context\"\n")
 	clientCode += fmt.Sprintf("\t\"cc/go-mongo/%s\"\n", strings.ToLower(structName))
 	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/bson\"\n")
-	clientCode += fmt.Sprintf(")\n")
+	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/mongo/options\"\n")
+	clientCode += fmt.Sprintf(")\n\n")
 
 	clientCode += fmt.Sprintf("type %sQuery struct {\n", structName)
 	clientCode += fmt.Sprintf("\tconfig\n")
 	clientCode += fmt.Sprintf("\tPredicates []%s.%sPredicate\n", strings.ToLower(structName), structName)
-	clientCode += fmt.Sprintf("\tdbName string\n\n")
-	clientCode += fmt.Sprintf("}\n")
+	clientCode += fmt.Sprintf("\tlimit  *int64\n")
+	clientCode += fmt.Sprintf("\toffset *int64\n")
+	clientCode += fmt.Sprintf("\tdbName string\n")
+	clientCode += fmt.Sprintf("\toptions bson.D\n\n")
+	clientCode += fmt.Sprintf("}\n\n")
+
+	clientCode += fmt.Sprintf("func (uq *%sQuery) Limit(limit int64) *%sQuery{\n", structName, structName)
+	clientCode += fmt.Sprintf("\tuq.limit = &limit\n")
+	clientCode += fmt.Sprintf("\treturn uq\n")
+	clientCode += fmt.Sprintf("}\n\n")
+
+	clientCode += fmt.Sprintf("func (uq *%sQuery) Offset(offset int64) *%sQuery{\n", structName, structName)
+	clientCode += fmt.Sprintf("\tuq.offset = &offset\n")
+	clientCode += fmt.Sprintf("\treturn uq\n")
+	clientCode += fmt.Sprintf("}\n\n")
+
+	clientCode += fmt.Sprintf("func (uq *%sQuery) Order(o ...OrderFunc) *%sQuery {\n"+
+		"\tfor _, fn := range o {\n"+
+		"\t\tfn(&uq.options)\n"+
+		"\t}\n"+
+		"\treturn uq\n}\n\n", structName, structName)
 
 	clientCode += fmt.Sprintf("func (uq *%sQuery) Where(ps ...%s.%sPredicate)*%sQuery{\n", structName, strings.ToLower(structName), structName, structName)
 	//clientCode += fmt.Sprintf("\tfilter := bson.D{}\n")
@@ -212,14 +232,26 @@ func generateQuery(structName string) []byte {
 	clientCode += fmt.Sprintf("\t\tuq.Predicates = append(uq.Predicates, p)\n")
 	clientCode += fmt.Sprintf("\t}\n")
 	clientCode += fmt.Sprintf("\treturn uq\n")
-	clientCode += fmt.Sprintf("}\n")
+	clientCode += fmt.Sprintf("}\n\n")
 
 	clientCode += fmt.Sprintf("func (uq *%sQuery) All(ctx context.Context)([]*%s,error) {\n", structName, structName)
 	clientCode += fmt.Sprintf("\tfilter := bson.D{}\n")
 	clientCode += fmt.Sprintf("\tfor _, p := range uq.Predicates {\n")
 	clientCode += fmt.Sprintf("\t\tp(&filter)\n")
+	clientCode += fmt.Sprintf("\t}\n\n")
+
+	clientCode += fmt.Sprintf("\to := options.Find()\n")
+	clientCode += fmt.Sprintf("\tif uq.limit != nil && *uq.limit != 0 {\n")
+	clientCode += fmt.Sprintf("\t\to = o.SetLimit(*uq.limit)\n")
 	clientCode += fmt.Sprintf("\t}\n")
-	clientCode += fmt.Sprintf("\tcur, err := uq.Database(uq.dbName).Collection(%s.%sMongo).Find(ctx, filter)\n", strings.ToLower(structName), structName)
+
+	clientCode += fmt.Sprintf("\tif uq.offset != nil && *uq.offset != 0 {\n")
+	clientCode += fmt.Sprintf("\t\to = o.SetSkip(*uq.offset)\n")
+	clientCode += fmt.Sprintf("\t}\n")
+
+	clientCode += fmt.Sprintf("\to.SetSort(uq.options)\n")
+
+	clientCode += fmt.Sprintf("\tcur, err := uq.Database(uq.dbName).Collection(%s.%sMongo).Find(ctx, filter,o)\n", strings.ToLower(structName), structName)
 	clientCode += fmt.Sprintf("\tif err != nil {\n")
 	clientCode += fmt.Sprintf("\t\treturn nil, err\n")
 	clientCode += fmt.Sprintf("\t}\n")
@@ -249,7 +281,6 @@ func generateFindFunction(structName string, fields []FieldInfo) string {
 
 	for _, field := range fields {
 		function += getFindFunctionTemplate(structName, field, "")
-		// todo:根据字段类型生成对应的比较符号
 		if v, ok := ComparisonOperators[field.Type]; ok {
 			for _, s := range v {
 				function += getFindFunctionTemplate(structName, field, s)
@@ -282,6 +313,7 @@ func generateClientCode(structNameList []string) []byte {
 	packageCode := fmt.Sprintf("package %s\n\n", strings.ToLower("go_mongo"))
 	//clientCode += fmt.Sprintf("import \"go.mongodb.org/mongo-driver/bson\"\n\n")
 	importCode := "import (\n"
+	importCode += "\t\"go.mongodb.org/mongo-driver/bson\"\n"
 	clientCode := fmt.Sprintf("type Client struct {\n")
 	clientCode += "\tconfig\n"
 	initFuncStr := "func (c *Client) init(){\n"
@@ -323,11 +355,20 @@ func generateClientCode(structNameList []string) []byte {
 		clientCode += fmt.Sprintf("\treturn &%sQuery{ \n", field)
 		clientCode += fmt.Sprintf("\t\tconfig: c.config,\n")
 		clientCode += fmt.Sprintf("\t\tPredicates: []%s.%sPredicate{},\n", strings.ToLower(field), field)
-
 		clientCode += fmt.Sprintf("\t\tdbName: c.dbName,\n")
+		clientCode += fmt.Sprintf("\t\toptions:    bson.D{},\n")
 		clientCode += fmt.Sprintf("\t}\n")
-		clientCode += "}\n"
+		clientCode += "}\n\n"
 	}
+	clientCode += fmt.Sprintf("type OrderFunc func(*bson.D)\n\n")
+	clientCode += fmt.Sprintf("func Desc(field string) OrderFunc {\n" +
+		"\treturn func(sort *bson.D) {\n" +
+		"\t\t*sort = append(*sort, bson.E{Key: field, Value: -1})\n\n" +
+		"\t}\n}\n")
+	clientCode += fmt.Sprintf("func Asc(field string) OrderFunc {\n" +
+		"\treturn func(sort *bson.D) {\n" +
+		"\t\t*sort = append(*sort, bson.E{Key: field, Value: 1})\n" +
+		"\t}\n}\n")
 
 	return []byte(clientCode)
 }
