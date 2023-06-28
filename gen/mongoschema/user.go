@@ -1,4 +1,4 @@
-package go_mongo
+package mongoschema
 
 type User struct {
 	UserName string `bson:"user_name"`

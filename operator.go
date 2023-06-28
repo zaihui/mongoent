@@ -1,4 +1,4 @@
-package go_mongo
+package mongoent
 
 var (
 	Eq    = "$eq"

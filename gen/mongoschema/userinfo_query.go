@@ -1,8 +1,8 @@
-package go_mongo
+package mongoschema
 
 import (
-	"cc/go-mongo/userinfo"
 	"context"
+	"github.com/zaihui/mongoent/gen/mongoschema/userinfo"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -11,18 +11,19 @@ import (
 type UserInfoQuery struct {
 	config
 	Predicates []userinfo.UserInfoPredicate
-	limit      *int64
-	offset     *int64
-	dbName     string
-	options    bson.D
+	limit  *int64
+	offset *int64
+	dbName string
+	options bson.D
+
 }
 
-func (uq *UserInfoQuery) Limit(limit int64) *UserInfoQuery {
+func (uq *UserInfoQuery) Limit(limit int64) *UserInfoQuery{
 	uq.limit = &limit
 	return uq
 }
 
-func (uq *UserInfoQuery) Offset(offset int64) *UserInfoQuery {
+func (uq *UserInfoQuery) Offset(offset int64) *UserInfoQuery{
 	uq.offset = &offset
 	return uq
 }
@@ -34,14 +35,14 @@ func (uq *UserInfoQuery) Order(o ...OrderFunc) *UserInfoQuery {
 	return uq
 }
 
-func (uq *UserInfoQuery) Where(ps ...userinfo.UserInfoPredicate) *UserInfoQuery {
+func (uq *UserInfoQuery) Where(ps ...userinfo.UserInfoPredicate)*UserInfoQuery{
 	for _, p := range ps {
 		uq.Predicates = append(uq.Predicates, p)
 	}
 	return uq
 }
 
-func (uq *UserInfoQuery) All(ctx context.Context) ([]*UserInfo, error) {
+func (uq *UserInfoQuery) All(ctx context.Context)([]*UserInfo,error) {
 	filter := bson.D{}
 	for _, p := range uq.Predicates {
 		p(&filter)
@@ -55,7 +56,7 @@ func (uq *UserInfoQuery) All(ctx context.Context) ([]*UserInfo, error) {
 		o = o.SetSkip(*uq.offset)
 	}
 	o.SetSort(uq.options)
-	cur, err := uq.Database(uq.dbName).Collection(userinfo.UserInfoMongo).Find(ctx, filter, o)
+	cur, err := uq.Database(uq.dbName).Collection(userinfo.UserInfoMongo).Find(ctx, filter,o)
 	if err != nil {
 		return nil, err
 	}

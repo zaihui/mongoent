@@ -1,4 +1,4 @@
-package go_mongo
+package mongoschema
 
 import "go.mongodb.org/mongo-driver/mongo"
 

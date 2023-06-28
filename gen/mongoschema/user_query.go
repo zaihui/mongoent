@@ -1,8 +1,8 @@
-package go_mongo
+package mongoschema
 
 import (
 	"context"
-	"cc/go-mongo/user"
+	"github.com/zaihui/mongoent/gen/mongoschema/user"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"

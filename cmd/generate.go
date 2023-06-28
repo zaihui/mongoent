@@ -1,13 +1,16 @@
-package go_mongo
+package main
 
 import (
 	"fmt"
+	"github.com/spf13/cobra"
+	"github.com/zaihui/mongoent"
 	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 )
@@ -18,12 +21,32 @@ type FieldInfo struct {
 	Type     string
 }
 
-func GetStructsFromGoFile(fileName string) {
-	structs, fileNameList := getStructsFromFile(fileName)
-	err := createModel(fileName)
+func init() {
+	cmd := &cobra.Command{
+		Use:   "generate",
+		Short: "generate ent model factory",
+		Run:   GetStructsFromGoFile,
+	}
+	RootCmd.AddCommand(cmd)
+}
+
+func GetStructsFromGoFile(cmd *cobra.Command, _ []string) {
+	modelFilePath, outputPath, modPath, err := ExtraFlags(cmd)
 	if err != nil {
 		fmt.Println("Error createModel:", err)
+		os.Exit(1)
+	}
+	finalOutputPath := outputPath + "/" + mongoent.MongoSchema
+	err = createDirectory(finalOutputPath)
+	if err != nil {
+		fmt.Println("Error createDirectory:", err)
+		os.Exit(1)
+	}
 
+	structs, fileNameList := getStructsFromFile(modelFilePath)
+	err = createModel(modelFilePath, finalOutputPath)
+	if err != nil {
+		fmt.Println("Error createModel:", err)
 		os.Exit(1)
 	}
 	for i, s := range structs {
@@ -34,43 +57,42 @@ func GetStructsFromGoFile(fileName string) {
 			os.Exit(1)
 		}
 		filename := strings.ToLower(fileNameList[i]) + ".go"
-		err = createDirectory(fileNameList[i])
+		err = createDirectory(finalOutputPath + "/" + fileNameList[i])
 		if err != nil {
 			fmt.Println("Error creating directory:", err)
 			os.Exit(1)
 		}
-		err = writeConstantsToFile(strings.ToLower(fileNameList[i])+"/"+filename, constants)
+		err = writeConstantsToFile(finalOutputPath+"/"+fileNameList[i]+"/"+filename, constants)
 		if err != nil {
 			fmt.Println("Error writing constants to file:", err)
 			os.Exit(1)
 		}
-		createQuery(fileNameList[i])
+		createQuery(finalOutputPath, modPath, fileNameList[i])
 
 	}
-	createClient(fileNameList)
-	createConfig()
-	//createOperator()
+	createClient(finalOutputPath, modPath, fileNameList)
+	createConfig(finalOutputPath)
 
 }
 
-func createClient(fileNameList []string) {
-	err := writeConstantsToFile("client.go", generateClientCode(fileNameList))
+func createClient(outputPath string, modPath string, fileNameList []string) {
+	err := writeConstantsToFile(outputPath+"/"+"client.go", generateClientCode(fileNameList, modPath))
 	if err != nil {
 		fmt.Println("Error writing constants to file:", err)
 		os.Exit(1)
 	}
 }
 
-func createConfig() {
-	err := writeConstantsToFile("config.go", generateConfig())
+func createConfig(outputPath string) {
+	err := writeConstantsToFile(outputPath+"/"+"config.go", generateConfig())
 	if err != nil {
 		fmt.Println("Error writing constants to file:", err)
 		os.Exit(1)
 	}
 }
 
-func createQuery(structName string) {
-	err := writeConstantsToFile(fmt.Sprintf("%s_query.go", strings.ToLower(structName)), generateQuery(structName))
+func createQuery(outputPath, modPath string, structName string) {
+	err := writeConstantsToFile(outputPath+"/"+fmt.Sprintf("%s_query.go", strings.ToLower(structName)), generateQuery(structName, modPath))
 	if err != nil {
 		fmt.Println("Error writing constants to file:", err)
 		os.Exit(1)
@@ -79,16 +101,45 @@ func createQuery(structName string) {
 
 func createDirectory(dirName string) error {
 	dirName = strings.ToLower(dirName)
-	err := os.Mkdir(strings.ToLower(dirName), os.ModePerm)
-	if err != nil {
-		if !os.IsExist(err) {
-			return err
+
+	// 根据传入的路径获取所有中间文件夹
+	directories := getAllDirectories(dirName)
+
+	// 遍历中间文件夹并逐个创建
+	for _, dir := range directories {
+		_, err := os.Stat(dir)
+		if os.IsNotExist(err) {
+			err := os.Mkdir(dir, os.ModePerm)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func createModel(filename string) error {
+func getAllDirectories(path string) []string {
+	// 根据路径获取绝对路径
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil
+	}
+
+	// 分隔路径中的目录部分
+	dirs := strings.Split(absPath, string(filepath.Separator))
+
+	// 构建所有中间文件夹的路径
+	var directories []string
+	currentPath := ""
+	for _, dir := range dirs {
+		currentPath = filepath.Join(currentPath, "/"+dir)
+		directories = append(directories, currentPath)
+	}
+
+	return directories
+}
+
+func createModel(filename string, outputPath string) error {
 	modelData, err := ioutil.ReadFile(filename)
 	if err != nil {
 		fmt.Println("Failed to read model file:", err)
@@ -113,16 +164,11 @@ func createModel(filename string) error {
 			continue
 		}
 
-		outputFile := strings.ToLower(structName) + ".go"
-		output, err := os.Create(outputFile)
+		c := fmt.Sprintf("package %s\n\n"+"type "+structDef, mongoent.MongoSchema)
+		outputFile := outputPath + "/" + strings.ToLower(structName) + ".go"
+		err = writeConstantsToFile(outputFile, []byte(c))
 		if err != nil {
 			fmt.Println("Failed to create output file:", err)
-			return err
-		}
-
-		_, err = output.WriteString("package go_mongo\n\n" + "type " + structDef)
-		if err != nil {
-			fmt.Println("Failed to write struct file:", err)
 			return err
 		}
 
@@ -184,7 +230,7 @@ func generateConstants(fileName string, fields []FieldInfo) ([]byte, error) {
 	builder.WriteString(fmt.Sprintf("package %s\n\n", strings.ToLower(fileName)))
 	builder.WriteString("import \"go.mongodb.org/mongo-driver/bson\"\n")
 	builder.WriteString("const (")
-	builder.WriteString(fmt.Sprintf("%sMongo = \"%s\"\n", fileName, ToSnakeCase(fileName)))
+	builder.WriteString(fmt.Sprintf("%sMongo = \"%s\"\n", fileName, mongoent.ToSnakeCase(fileName)))
 	for _, field := range fields {
 		builder.WriteString(fmt.Sprintf("%sField = \"%s\"\n", field.Name, field.JSONName))
 	}
@@ -204,12 +250,13 @@ func generatePredicate(typeName string) string {
 		"type %sPredicate func(*bson.D)", typeName)
 }
 
-func generateQuery(structName string) []byte {
-	clientCode := "package go_mongo\n\n"
+func generateQuery(structName string, modPath string) []byte {
+	clientCode := fmt.Sprintf("package %s\n\n", mongoent.MongoSchema)
 
 	clientCode += fmt.Sprintf("import (\n")
 	clientCode += fmt.Sprintf("\t\"context\"\n")
-	clientCode += fmt.Sprintf("\t\"cc/go-mongo/%s\"\n", strings.ToLower(structName))
+
+	clientCode += fmt.Sprintf("\t\"%s/%s\"\n", modPath, strings.ToLower(structName))
 	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/bson\"\n")
 	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/mongo\"\n")
 	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/mongo/options\"\n")
@@ -305,7 +352,7 @@ func generateFindFunction(structName string, fields []FieldInfo) string {
 
 	for _, field := range fields {
 		function += getFindFunctionTemplate(structName, field, "")
-		if v, ok := ComparisonOperators[field.Type]; ok {
+		if v, ok := mongoent.ComparisonOperators[field.Type]; ok {
 			for _, s := range v {
 				function += getFindFunctionTemplate(structName, field, s)
 			}
@@ -317,12 +364,12 @@ func generateFindFunction(structName string, fields []FieldInfo) string {
 func getFindFunctionTemplate(structName string, field FieldInfo, op string) string {
 
 	builder := strings.Builder{}
-	builder.WriteString(fmt.Sprintf("func %s%s(v %s) %sPredicate {\n", field.Name, OpSplit(op), field.Type, structName))
+	builder.WriteString(fmt.Sprintf("func %s%s(v %s) %sPredicate {\n", field.Name, mongoent.OpSplit(op), field.Type, structName))
 	builder.WriteString("\treturn func(d *bson.D) {\n")
 	builder.WriteString(fmt.Sprintf("\t\t*d = append(*d, bson.E{\n"))
 	builder.WriteString(fmt.Sprintf("\t\t\tKey:   %sField,\n", field.Name))
 	if op == "" {
-		op = Eq
+		op = mongoent.Eq
 	}
 	builder.WriteString(fmt.Sprintf("\t\t\tValue: bson.M{\"%s\": v},\n", op))
 	builder.WriteString("\t\t})\n")
@@ -333,8 +380,8 @@ func getFindFunctionTemplate(structName string, field FieldInfo, op string) stri
 
 }
 
-func generateClientCode(structNameList []string) []byte {
-	packageCode := fmt.Sprintf("package %s\n\n", strings.ToLower("go_mongo"))
+func generateClientCode(structNameList []string, modPath string) []byte {
+	packageCode := fmt.Sprintf("package %s\n\n", mongoent.MongoSchema)
 	//clientCode += fmt.Sprintf("import \"go.mongodb.org/mongo-driver/bson\"\n\n")
 	importCode := "import (\n"
 	importCode += "\t\"go.mongodb.org/mongo-driver/bson\"\n"
@@ -342,7 +389,7 @@ func generateClientCode(structNameList []string) []byte {
 	clientCode += "\tconfig\n"
 	initFuncStr := "func (c *Client) init(){\n"
 	for _, field := range structNameList {
-		importCode += fmt.Sprintf("\t\"cc/go-mongo/%s\"\n", strings.ToLower(field))
+		importCode += fmt.Sprintf("\t\"%s/%s\"\n", modPath, strings.ToLower(field))
 		clientCode += fmt.Sprintf("\t%s *%sClient\n", field, field)
 		initFuncStr += fmt.Sprintf("\tc.%s = New%sClient(c.config)\n", field, field)
 	}
@@ -398,7 +445,7 @@ func generateClientCode(structNameList []string) []byte {
 }
 
 func generateConfig() []byte {
-	clientCode := fmt.Sprintf("package %s\n\n", strings.ToLower("go_mongo"))
+	clientCode := fmt.Sprintf("package %s\n\n", mongoent.MongoSchema)
 	clientCode += fmt.Sprintf("import \"go.mongodb.org/mongo-driver/mongo\"\n\n")
 	clientCode += fmt.Sprintf("type config struct {\n")
 	clientCode += fmt.Sprintf("\tmongo.Client\n")
@@ -420,5 +467,6 @@ func generateConfig() []byte {
 }
 
 func writeConstantsToFile(filename string, constants []byte) error {
+	filename = strings.ToLower(filename)
 	return os.WriteFile(filename, constants, 0644)
 }

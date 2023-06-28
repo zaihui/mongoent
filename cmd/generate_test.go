@@ -1,9 +1,10 @@
-package go_mongo
+package main
 
 import (
-	"cc/go-mongo/user"
 	"context"
 	"fmt"
+	"github.com/zaihui/mongoent/gen/mongoschema"
+	"github.com/zaihui/mongoent/gen/mongoschema/user"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
@@ -12,7 +13,7 @@ import (
 )
 
 func TestGenerate(t *testing.T) {
-	GetStructsFromGoFile("/Users/zh/sdk/go1.16/demo/go-mongo/spec/model.go")
+	//GetStructsFromGoFile("/Users/zh/sdk/go1.16/demo/go-mongo/spec/model.go")
 }
 
 func TestQueryUserInfo(t *testing.T) {
@@ -27,7 +28,7 @@ func TestQueryUserInfo(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	newClient := NewClient(Driver(*client))
+	newClient := mongoschema.NewClient(mongoschema.Driver(*client))
 
 	all, err := newClient.User.SetDBName("my_mongo").Query().
 		Where(
@@ -36,8 +37,8 @@ func TestQueryUserInfo(t *testing.T) {
 		).Offset(0).
 		Limit(10).
 		Order(
-			Desc(user.AgeField),
-			Asc(user.UserNameField)).
+			mongoschema.Desc(user.AgeField),
+			mongoschema.Asc(user.UserNameField)).
 		First(ctx)
 	if err != nil {
 		log.Fatal(err)
