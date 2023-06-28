@@ -2,6 +2,7 @@ package mongoschema
 
 import (
 	"context"
+
 	"github.com/zaihui/mongoent/gen/mongoschema/user"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -11,19 +12,18 @@ import (
 type UserQuery struct {
 	config
 	Predicates []user.UserPredicate
-	limit  *int64
-	offset *int64
-	dbName string
-	options bson.D
-
+	limit      *int64
+	offset     *int64
+	dbName     string
+	options    bson.D
 }
 
-func (uq *UserQuery) Limit(limit int64) *UserQuery{
+func (uq *UserQuery) Limit(limit int64) *UserQuery {
 	uq.limit = &limit
 	return uq
 }
 
-func (uq *UserQuery) Offset(offset int64) *UserQuery{
+func (uq *UserQuery) Offset(offset int64) *UserQuery {
 	uq.offset = &offset
 	return uq
 }
@@ -35,14 +35,12 @@ func (uq *UserQuery) Order(o ...OrderFunc) *UserQuery {
 	return uq
 }
 
-func (uq *UserQuery) Where(ps ...user.UserPredicate)*UserQuery{
-	for _, p := range ps {
-		uq.Predicates = append(uq.Predicates, p)
-	}
+func (uq *UserQuery) Where(ps ...user.UserPredicate) *UserQuery {
+	uq.Predicates = append(uq.Predicates, ps...)
 	return uq
 }
 
-func (uq *UserQuery) All(ctx context.Context)([]*User,error) {
+func (uq *UserQuery) All(ctx context.Context) ([]*User, error) {
 	filter := bson.D{}
 	for _, p := range uq.Predicates {
 		p(&filter)
@@ -56,12 +54,12 @@ func (uq *UserQuery) All(ctx context.Context)([]*User,error) {
 		o = o.SetSkip(*uq.offset)
 	}
 	o.SetSort(uq.options)
-	cur, err := uq.Database(uq.dbName).Collection(user.UserMongo).Find(ctx, filter,o)
+	cur, err := uq.Database(uq.dbName).Collection(user.UserMongo).Find(ctx, filter, o)
 	if err != nil {
 		return nil, err
 	}
 	defer cur.Close(ctx)
-	temp := make([]*User, 0, 0)
+	temp := make([]*User, 0)
 	for cur.Next(ctx) {
 		var u User
 		err = cur.Decode(&u)
@@ -75,6 +73,7 @@ func (uq *UserQuery) All(ctx context.Context)([]*User,error) {
 	}
 	return temp, nil
 }
+
 func (uq *UserQuery) First(ctx context.Context) (*User, error) {
 	document, err := uq.Limit(1).All(ctx)
 	if err != nil {

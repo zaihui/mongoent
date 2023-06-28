@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/zaihui/mongoent"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/zaihui/mongoent"
 )
 
 // RootCmd represents the base command when called without any subcommands
@@ -44,7 +44,6 @@ func init() {
 	RootCmd.PersistentFlags().StringP("outputPath", "o", "", "path to write factories")
 	RootCmd.PersistentFlags().StringP("projectPath", "p", "", "the relative path of this project")
 	RootCmd.PersistentFlags().StringP("goModPath", "g", "", "the relative path of this project")
-
 }
 
 func Fatal(msg string) {

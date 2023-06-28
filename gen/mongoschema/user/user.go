@@ -16,6 +16,7 @@ func UserName(v string) UserPredicate {
 		})
 	}
 }
+
 func UserNameEQ(v string) UserPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{
@@ -24,6 +25,7 @@ func UserNameEQ(v string) UserPredicate {
 		})
 	}
 }
+
 func UserNameNE(v string) UserPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{
@@ -32,6 +34,7 @@ func UserNameNE(v string) UserPredicate {
 		})
 	}
 }
+
 func UserNameRegex(v string) UserPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{
@@ -40,6 +43,7 @@ func UserNameRegex(v string) UserPredicate {
 		})
 	}
 }
+
 func Age(v int) UserPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{
@@ -48,6 +52,7 @@ func Age(v int) UserPredicate {
 		})
 	}
 }
+
 func AgeEQ(v int) UserPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{
@@ -56,6 +61,7 @@ func AgeEQ(v int) UserPredicate {
 		})
 	}
 }
+
 func AgeNE(v int) UserPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{
@@ -64,6 +70,7 @@ func AgeNE(v int) UserPredicate {
 		})
 	}
 }
+
 func AgeGT(v int) UserPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{
@@ -72,6 +79,7 @@ func AgeGT(v int) UserPredicate {
 		})
 	}
 }
+
 func AgeLT(v int) UserPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{
@@ -80,6 +88,7 @@ func AgeLT(v int) UserPredicate {
 		})
 	}
 }
+
 func AgeGTE(v int) UserPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{
@@ -88,6 +97,7 @@ func AgeGTE(v int) UserPredicate {
 		})
 	}
 }
+
 func AgeLTE(v int) UserPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{

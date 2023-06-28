@@ -3,21 +3,26 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
+	"testing"
+	"time"
+
 	"github.com/zaihui/mongoent/gen/mongoschema"
 	"github.com/zaihui/mongoent/gen/mongoschema/user"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"log"
-	"testing"
-	"time"
 )
 
 func TestGenerate(t *testing.T) {
-	//GetStructsFromGoFile("/Users/zh/sdk/go1.16/demo/go-mongo/spec/model.go")
+	// GetStructsFromGoFile("/Users/zh/sdk/go1.16/demo/go-mongo/spec/model.go")
+
+	cc := []string{"a", "b", "c"}
+	for s := range cc {
+		fmt.Println(s)
+	}
 }
 
 func TestQueryUserInfo(t *testing.T) {
-
 	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
 	if err != nil {
 		log.Fatal(err)
@@ -32,7 +37,7 @@ func TestQueryUserInfo(t *testing.T) {
 
 	all, err := newClient.User.SetDBName("my_mongo").Query().
 		Where(
-			//user.AgeEQ(int(2)),
+			// user.AgeEQ(int(2)),
 			user.UserNameRegex("c*"),
 		).Offset(0).
 		Limit(10).
@@ -45,5 +50,4 @@ func TestQueryUserInfo(t *testing.T) {
 		return
 	}
 	fmt.Println(all)
-
 }

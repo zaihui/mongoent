@@ -2,17 +2,18 @@ package main
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
-	"github.com/zaihui/mongoent"
 	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/token"
-	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"github.com/spf13/cobra"
+	"github.com/zaihui/mongoent"
 )
 
 type FieldInfo struct {
@@ -72,7 +73,13 @@ func GetStructsFromGoFile(cmd *cobra.Command, _ []string) {
 	}
 	createClient(finalOutputPath, modPath, fileNameList)
 	createConfig(finalOutputPath)
-
+	// 格式化生成的go文件
+	err = formatFilesInDirectory(finalOutputPath)
+	if err != nil {
+		fmt.Println("Error formatting files:", err)
+	} else {
+		fmt.Println("All files formatted successfully.")
+	}
 }
 
 func createClient(outputPath string, modPath string, fileNameList []string) {
@@ -140,7 +147,7 @@ func getAllDirectories(path string) []string {
 }
 
 func createModel(filename string, outputPath string) error {
-	modelData, err := ioutil.ReadFile(filename)
+	modelData, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Println("Failed to read model file:", err)
 		return err
@@ -189,7 +196,6 @@ func getStructsFromFile(filename string) ([]*ast.StructType, []string) {
 	structNameList := make([]string, 0)
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch x := n.(type) {
-
 		case *ast.TypeSpec:
 			if s, ok := x.Type.(*ast.StructType); ok {
 				structNameList = append(structNameList, x.Name.Name)
@@ -253,34 +259,34 @@ func generatePredicate(typeName string) string {
 func generateQuery(structName string, modPath string) []byte {
 	clientCode := fmt.Sprintf("package %s\n\n", mongoent.MongoSchema)
 
-	clientCode += fmt.Sprintf("import (\n")
-	clientCode += fmt.Sprintf("\t\"context\"\n")
+	clientCode += "import (\n"
+	clientCode += "\t\"context\"\n"
 
 	clientCode += fmt.Sprintf("\t\"%s/%s\"\n", modPath, strings.ToLower(structName))
-	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/bson\"\n")
-	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/mongo\"\n")
-	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/mongo/options\"\n")
+	clientCode += "\t\"go.mongodb.org/mongo-driver/bson\"\n"
+	clientCode += "\t\"go.mongodb.org/mongo-driver/mongo\"\n"
+	clientCode += "\t\"go.mongodb.org/mongo-driver/mongo/options\"\n"
 
-	clientCode += fmt.Sprintf(")\n\n")
+	clientCode += ")\n\n"
 
 	clientCode += fmt.Sprintf("type %sQuery struct {\n", structName)
-	clientCode += fmt.Sprintf("\tconfig\n")
+	clientCode += "\tconfig\n"
 	clientCode += fmt.Sprintf("\tPredicates []%s.%sPredicate\n", strings.ToLower(structName), structName)
-	clientCode += fmt.Sprintf("\tlimit  *int64\n")
-	clientCode += fmt.Sprintf("\toffset *int64\n")
-	clientCode += fmt.Sprintf("\tdbName string\n")
-	clientCode += fmt.Sprintf("\toptions bson.D\n\n")
-	clientCode += fmt.Sprintf("}\n\n")
+	clientCode += "\tlimit  *int64\n"
+	clientCode += "\toffset *int64\n"
+	clientCode += "\tdbName string\n"
+	clientCode += "\toptions bson.D\n\n"
+	clientCode += "}\n\n"
 
 	clientCode += fmt.Sprintf("func (uq *%sQuery) Limit(limit int64) *%sQuery{\n", structName, structName)
-	clientCode += fmt.Sprintf("\tuq.limit = &limit\n")
-	clientCode += fmt.Sprintf("\treturn uq\n")
-	clientCode += fmt.Sprintf("}\n\n")
+	clientCode += "\tuq.limit = &limit\n"
+	clientCode += "\treturn uq\n"
+	clientCode += "}\n\n"
 
 	clientCode += fmt.Sprintf("func (uq *%sQuery) Offset(offset int64) *%sQuery{\n", structName, structName)
-	clientCode += fmt.Sprintf("\tuq.offset = &offset\n")
-	clientCode += fmt.Sprintf("\treturn uq\n")
-	clientCode += fmt.Sprintf("}\n\n")
+	clientCode += "\tuq.offset = &offset\n"
+	clientCode += "\treturn uq\n"
+	clientCode += "}\n\n"
 
 	clientCode += fmt.Sprintf("func (uq *%sQuery) Order(o ...OrderFunc) *%sQuery {\n"+
 		"\tfor _, fn := range o {\n"+
@@ -289,50 +295,47 @@ func generateQuery(structName string, modPath string) []byte {
 		"\treturn uq\n}\n\n", structName, structName)
 
 	clientCode += fmt.Sprintf("func (uq *%sQuery) Where(ps ...%s.%sPredicate)*%sQuery{\n", structName, strings.ToLower(structName), structName, structName)
-	//clientCode += fmt.Sprintf("\tfilter := bson.D{}\n")
-	clientCode += fmt.Sprintf("\tfor _, p := range ps {\n")
-	clientCode += fmt.Sprintf("\t\tuq.Predicates = append(uq.Predicates, p)\n")
-	clientCode += fmt.Sprintf("\t}\n")
-	clientCode += fmt.Sprintf("\treturn uq\n")
-	clientCode += fmt.Sprintf("}\n\n")
+	clientCode += "\tuq.Predicates = append(uq.Predicates, ps...)\n"
+	clientCode += "\treturn uq\n"
+	clientCode += "}\n\n"
 
 	clientCode += fmt.Sprintf("func (uq *%sQuery) All(ctx context.Context)([]*%s,error) {\n", structName, structName)
-	clientCode += fmt.Sprintf("\tfilter := bson.D{}\n")
-	clientCode += fmt.Sprintf("\tfor _, p := range uq.Predicates {\n")
-	clientCode += fmt.Sprintf("\t\tp(&filter)\n")
-	clientCode += fmt.Sprintf("\t}\n\n")
+	clientCode += "\tfilter := bson.D{}\n"
+	clientCode += "\tfor _, p := range uq.Predicates {\n"
+	clientCode += "\t\tp(&filter)\n"
+	clientCode += "\t}\n\n"
 
-	clientCode += fmt.Sprintf("\to := options.Find()\n")
-	clientCode += fmt.Sprintf("\tif uq.limit != nil && *uq.limit != 0 {\n")
-	clientCode += fmt.Sprintf("\t\to = o.SetLimit(*uq.limit)\n")
-	clientCode += fmt.Sprintf("\t}\n")
+	clientCode += "\to := options.Find()\n"
+	clientCode += "\tif uq.limit != nil && *uq.limit != 0 {\n"
+	clientCode += "\t\to = o.SetLimit(*uq.limit)\n"
+	clientCode += "\t}\n"
 
-	clientCode += fmt.Sprintf("\tif uq.offset != nil && *uq.offset != 0 {\n")
-	clientCode += fmt.Sprintf("\t\to = o.SetSkip(*uq.offset)\n")
-	clientCode += fmt.Sprintf("\t}\n")
+	clientCode += "\tif uq.offset != nil && *uq.offset != 0 {\n"
+	clientCode += "\t\to = o.SetSkip(*uq.offset)\n"
+	clientCode += "\t}\n"
 
-	clientCode += fmt.Sprintf("\to.SetSort(uq.options)\n")
+	clientCode += "\to.SetSort(uq.options)\n"
 
 	clientCode += fmt.Sprintf("\tcur, err := uq.Database(uq.dbName).Collection(%s.%sMongo).Find(ctx, filter,o)\n", strings.ToLower(structName), structName)
-	clientCode += fmt.Sprintf("\tif err != nil {\n")
-	clientCode += fmt.Sprintf("\t\treturn nil, err\n")
-	clientCode += fmt.Sprintf("\t}\n")
-	clientCode += fmt.Sprintf("\tdefer cur.Close(ctx)\n")
+	clientCode += "\tif err != nil {\n"
+	clientCode += "\t\treturn nil, err\n"
+	clientCode += "\t}\n"
+	clientCode += "\tdefer cur.Close(ctx)\n"
 	// todo:修改引用的包
-	clientCode += fmt.Sprintf("\ttemp := make([]*%s, 0, 0)\n", structName)
-	clientCode += fmt.Sprintf("\tfor cur.Next(ctx) {\n")
+	clientCode += fmt.Sprintf("\ttemp := make([]*%s, 0)\n", structName)
+	clientCode += "\tfor cur.Next(ctx) {\n"
 	clientCode += fmt.Sprintf("\t\tvar u %s\n", structName)
-	clientCode += fmt.Sprintf("\t\terr = cur.Decode(&u)\n")
-	clientCode += fmt.Sprintf("\t\tif err != nil {\n")
-	clientCode += fmt.Sprintf("\t\t\treturn nil, err\n")
-	clientCode += fmt.Sprintf("\t\t}\n")
-	clientCode += fmt.Sprintf("\t\ttemp = append(temp, &u)\n")
-	clientCode += fmt.Sprintf("\t}\n")
-	clientCode += fmt.Sprintf("\tif err = cur.Err(); err != nil {\n")
-	clientCode += fmt.Sprintf("\t\treturn nil, err\n")
-	clientCode += fmt.Sprintf("\t}\n")
-	clientCode += fmt.Sprintf("\treturn temp, nil\n")
-	clientCode += fmt.Sprintf("}\n")
+	clientCode += "\t\terr = cur.Decode(&u)\n"
+	clientCode += "\t\tif err != nil {\n"
+	clientCode += "\t\t\treturn nil, err\n"
+	clientCode += "\t\t}\n"
+	clientCode += "\t\ttemp = append(temp, &u)\n"
+	clientCode += "\t}\n"
+	clientCode += "\tif err = cur.Err(); err != nil {\n"
+	clientCode += "\t\treturn nil, err\n"
+	clientCode += "\t}\n"
+	clientCode += "\treturn temp, nil\n"
+	clientCode += "}\n"
 	clientCode += fmt.Sprintf("func (uq *%sQuery) First(ctx context.Context) (*%s, error) {\n"+
 		"\tdocument, err := uq.Limit(1).All(ctx)\n"+
 		"\tif err != nil {\n"+
@@ -344,7 +347,6 @@ func generateQuery(structName string, modPath string) []byte {
 		"\treturn document[0], err\n}", structName, structName)
 
 	return []byte(clientCode)
-
 }
 
 func generateFindFunction(structName string, fields []FieldInfo) string {
@@ -362,11 +364,10 @@ func generateFindFunction(structName string, fields []FieldInfo) string {
 }
 
 func getFindFunctionTemplate(structName string, field FieldInfo, op string) string {
-
 	builder := strings.Builder{}
 	builder.WriteString(fmt.Sprintf("func %s%s(v %s) %sPredicate {\n", field.Name, mongoent.OpSplit(op), field.Type, structName))
 	builder.WriteString("\treturn func(d *bson.D) {\n")
-	builder.WriteString(fmt.Sprintf("\t\t*d = append(*d, bson.E{\n"))
+	builder.WriteString("\t\t*d = append(*d, bson.E{\n")
 	builder.WriteString(fmt.Sprintf("\t\t\tKey:   %sField,\n", field.Name))
 	if op == "" {
 		op = mongoent.Eq
@@ -377,15 +378,14 @@ func getFindFunctionTemplate(structName string, field FieldInfo, op string) stri
 	builder.WriteString("}\n")
 
 	return builder.String()
-
 }
 
 func generateClientCode(structNameList []string, modPath string) []byte {
 	packageCode := fmt.Sprintf("package %s\n\n", mongoent.MongoSchema)
-	//clientCode += fmt.Sprintf("import \"go.mongodb.org/mongo-driver/bson\"\n\n")
+	// clientCode += fmt.Sprintf("import \"go.mongodb.org/mongo-driver/bson\"\n\n")
 	importCode := "import (\n"
 	importCode += "\t\"go.mongodb.org/mongo-driver/bson\"\n"
-	clientCode := fmt.Sprintf("type Client struct {\n")
+	clientCode := "type Client struct {\n"
 	clientCode += "\tconfig\n"
 	initFuncStr := "func (c *Client) init(){\n"
 	for _, field := range structNameList {
@@ -397,13 +397,13 @@ func generateClientCode(structNameList []string, modPath string) []byte {
 	initFuncStr += "}\n"
 	clientCode += "}\n\n"
 	clientCode = packageCode + importCode + "\n" + clientCode + initFuncStr
-	clientCode += fmt.Sprintf("func NewClient(opts ...Option) *Client {\n")
-	clientCode += fmt.Sprintf("\tcfg := config{}\n")
-	clientCode += fmt.Sprintf("\tcfg.options(opts...)\n")
-	clientCode += fmt.Sprintf("\tclient := &Client{config: cfg}\n")
-	clientCode += fmt.Sprintf("\tclient.init()\n")
-	clientCode += fmt.Sprintf("\treturn client\n")
-	clientCode += fmt.Sprintf("}\n")
+	clientCode += "func NewClient(opts ...Option) *Client {\n"
+	clientCode += "\tcfg := config{}\n"
+	clientCode += "\tcfg.options(opts...)\n"
+	clientCode += "\tclient := &Client{config: cfg}\n"
+	clientCode += "\tclient.init()\n"
+	clientCode += "\treturn client\n"
+	clientCode += "}\n"
 
 	for _, field := range structNameList {
 		// struct
@@ -413,25 +413,25 @@ func generateClientCode(structNameList []string, modPath string) []byte {
 		clientCode += "}\n"
 
 		clientCode += fmt.Sprintf("func (c *%sClient)SetDBName(dbName string)*%sClient{\n", field, field)
-		clientCode += fmt.Sprintf("\tc.dbName=dbName\n")
-		clientCode += fmt.Sprintf("\treturn c\n")
-		clientCode += fmt.Sprintf("}\n")
+		clientCode += "\tc.dbName=dbName\n"
+		clientCode += "\treturn c\n"
+		clientCode += "}\n"
 
-		//new field client
+		// new field client
 		clientCode += fmt.Sprintf("func New%sClient(c config) *%sClient {\n", field, field)
 		clientCode += fmt.Sprintf("\treturn &%sClient{ config: c }\n", field)
 		clientCode += "}\n"
 
 		clientCode += fmt.Sprintf("func(c *%sClient) Query() *%sQuery {\n", field, field)
 		clientCode += fmt.Sprintf("\treturn &%sQuery{ \n", field)
-		clientCode += fmt.Sprintf("\t\tconfig: c.config,\n")
+		clientCode += "\t\tconfig: c.config,\n"
 		clientCode += fmt.Sprintf("\t\tPredicates: []%s.%sPredicate{},\n", strings.ToLower(field), field)
-		clientCode += fmt.Sprintf("\t\tdbName: c.dbName,\n")
-		clientCode += fmt.Sprintf("\t\toptions:    bson.D{},\n")
-		clientCode += fmt.Sprintf("\t}\n")
+		clientCode += "\t\tdbName: c.dbName,\n"
+		clientCode += "\t\toptions:    bson.D{},\n"
+		clientCode += "\t}\n"
 		clientCode += "}\n\n"
 	}
-	clientCode += fmt.Sprintf("type OrderFunc func(*bson.D)\n\n")
+	clientCode += "type OrderFunc func(*bson.D)\n\n"
 	clientCode += fmt.Sprintf("func Desc(field string) OrderFunc {\n" +
 		"\treturn func(sort *bson.D) {\n" +
 		"\t\t*sort = append(*sort, bson.E{Key: field, Value: -1})\n\n" +
@@ -446,27 +446,56 @@ func generateClientCode(structNameList []string, modPath string) []byte {
 
 func generateConfig() []byte {
 	clientCode := fmt.Sprintf("package %s\n\n", mongoent.MongoSchema)
-	clientCode += fmt.Sprintf("import \"go.mongodb.org/mongo-driver/mongo\"\n\n")
-	clientCode += fmt.Sprintf("type config struct {\n")
-	clientCode += fmt.Sprintf("\tmongo.Client\n")
+	clientCode += "import \"go.mongodb.org/mongo-driver/mongo\"\n\n"
+	clientCode += "type config struct {\n"
+	clientCode += "\tmongo.Client\n"
 	clientCode += "}\n"
 	clientCode += "type Option func(*config)\n"
 	clientCode += "func (c *config) options(opts ...Option) {"
-	clientCode += fmt.Sprintf("\tfor _, opt := range opts {\n")
-	clientCode += fmt.Sprintf("\t\topt(c)\n")
-	clientCode += fmt.Sprintf("\t}\n")
-	clientCode += fmt.Sprintf("}\n")
-	clientCode += fmt.Sprintf("func Driver(driver mongo.Client) Option {\n")
-	clientCode += fmt.Sprintf("\treturn func(c *config) {\n")
-	clientCode += fmt.Sprintf("\t\tc.Client = driver\n")
-	clientCode += fmt.Sprintf("\t}\n")
-	clientCode += fmt.Sprintf("}\n")
+	clientCode += "\tfor _, opt := range opts {\n"
+	clientCode += "\t\topt(c)\n"
+	clientCode += "\t}\n"
+	clientCode += "}\n"
+	clientCode += "func Driver(driver mongo.Client) Option {\n"
+	clientCode += "\treturn func(c *config) {\n"
+	clientCode += "\t\tc.Client = driver\n"
+	clientCode += "\t}\n"
+	clientCode += "}\n"
 
 	return []byte(clientCode)
-
 }
 
 func writeConstantsToFile(filename string, constants []byte) error {
 	filename = strings.ToLower(filename)
-	return os.WriteFile(filename, constants, 0644)
+	return os.WriteFile(filename, constants, 0o644)
+}
+
+func formatFilesInDirectory(dirPath string) error {
+	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(info.Name(), ".go") {
+			cmd := exec.Command("gofmt", "-w", path)
+			err := cmd.Run()
+			if err != nil {
+				return fmt.Errorf("failed to format file %s: %v", path, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to format files in directory %s: %v", dirPath, err)
+	}
+	cmd := exec.Command("goimports", "-w", dirPath)
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to format directory %s: %v", dirPath, err)
+	}
+	cmd = exec.Command("gofumpt", "-w", dirPath)
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to format directory %s: %v", dirPath, err)
+	}
+	return nil
 }

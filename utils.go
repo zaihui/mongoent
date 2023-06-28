@@ -1,10 +1,11 @@
 package mongoent
 
 import (
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"regexp"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func ConvertToCamelCase(s string) string {
@@ -25,7 +26,6 @@ func ToSnakeCase(input string) string {
 }
 
 func OpSplit(s string) string {
-
 	split := strings.Split(s, "$")
 	if len(split) < 2 {
 		return ""

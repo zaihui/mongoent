@@ -6,10 +6,13 @@ type config struct {
 	mongo.Client
 }
 type Option func(*config)
-func (c *config) options(opts ...Option) {	for _, opt := range opts {
+
+func (c *config) options(opts ...Option) {
+	for _, opt := range opts {
 		opt(c)
 	}
 }
+
 func Driver(driver mongo.Client) Option {
 	return func(c *config) {
 		c.Client = driver
