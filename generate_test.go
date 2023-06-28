@@ -12,7 +12,7 @@ import (
 )
 
 func TestGenerate(t *testing.T) {
-	GetStructsFromGoFile("/Users/zh/sdk/go1.16/demo/go-mongo/model.go")
+	GetStructsFromGoFile("/Users/zh/sdk/go1.16/demo/go-mongo/spec/model.go")
 }
 
 func TestQueryUserInfo(t *testing.T) {
@@ -29,20 +29,20 @@ func TestQueryUserInfo(t *testing.T) {
 	}
 	newClient := NewClient(Driver(*client))
 
-	all, err := newClient.User.SetDBName("my_mongo").Query().Where(
-		//user.AgeEQ(int(2)),
-		user.UserNameRegex("c*"),
-	).Offset(0).
+	all, err := newClient.User.SetDBName("my_mongo").Query().
+		Where(
+			//user.AgeEQ(int(2)),
+			user.UserNameRegex("c*"),
+		).Offset(0).
 		Limit(10).
 		Order(
 			Desc(user.AgeField),
 			Asc(user.UserNameField)).
-		All(ctx)
+		First(ctx)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
-
-	fmt.Println(all[0], all[1], all[2])
+	fmt.Println(all)
 
 }

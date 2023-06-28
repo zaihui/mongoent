@@ -6,6 +6,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -19,6 +20,12 @@ type FieldInfo struct {
 
 func GetStructsFromGoFile(fileName string) {
 	structs, fileNameList := getStructsFromFile(fileName)
+	err := createModel(fileName)
+	if err != nil {
+		fmt.Println("Error createModel:", err)
+
+		os.Exit(1)
+	}
 	for i, s := range structs {
 		fields := getFieldsFromStruct(s)
 		constants, err := generateConstants(fileNameList[i], fields)
@@ -81,41 +88,47 @@ func createDirectory(dirName string) error {
 	return nil
 }
 
-//func createOperator() {
-//	err := writeConstantsToFile("operator.go", generateOperator())
-//	if err != nil {
-//		fmt.Println("Error writing constants to file:", err)
-//		os.Exit(1)
-//	}
-//
-//}
-
-//	func generateOperator() []byte {
-//		builder := strings.Builder{}
-//		builder.WriteString("package go_mongo\n\n")
-//
-//		builder.WriteString("var ComparisonOperators = map[string][]string{\n")
-//
-//		// 添加字段类型和比较操作符的映射
-//		addMapping(&builder, "int", []string{"$eq", "$ne", "$gt", "$lt", "$gte", "$lte"})
-//		addMapping(&builder, "string", []string{"$eq", "$ne", "$regex"})
-//		addMapping(&builder, "bool", []string{"$eq", "$ne"})
-//		// 添加其他字段类型和相应的比较操作符...
-//
-//		builder.WriteString("}\n")
-//
-//		return []byte(builder.String())
-//
-// }
-func addMapping(builder *strings.Builder, fieldType string, operators []string) {
-	builder.WriteString(fmt.Sprintf("\t\"%s\": []string{", fieldType))
-	for i, op := range operators {
-		builder.WriteString(fmt.Sprintf("\"%s\"", op))
-		if i < len(operators)-1 {
-			builder.WriteString(", ")
-		}
+func createModel(filename string) error {
+	modelData, err := ioutil.ReadFile(filename)
+	if err != nil {
+		fmt.Println("Failed to read model file:", err)
+		return err
 	}
-	builder.WriteString("},\n")
+	// 按分割符号 "type " 将内容拆分为每个结构体的定义
+	structureDefinitions := strings.Split(string(modelData), "type ")
+	// 遍历每个结构体定义并生成对应的文件
+	for _, structDef := range structureDefinitions {
+		structDef = strings.TrimSpace(structDef)
+		if structDef == "" {
+			continue
+		}
+
+		lines := strings.Split(structDef, "\n")
+		if len(lines) == 0 {
+			continue
+		}
+
+		structName := strings.SplitN(lines[0], " ", 2)[0]
+		if structName == "package" {
+			continue
+		}
+
+		outputFile := strings.ToLower(structName) + ".go"
+		output, err := os.Create(outputFile)
+		if err != nil {
+			fmt.Println("Failed to create output file:", err)
+			return err
+		}
+
+		_, err = output.WriteString("package go_mongo\n\n" + "type " + structDef)
+		if err != nil {
+			fmt.Println("Failed to write struct file:", err)
+			return err
+		}
+
+		fmt.Println(outputFile, "generated successfully.")
+	}
+	return nil
 }
 
 func getStructsFromFile(filename string) ([]*ast.StructType, []string) {
@@ -198,7 +211,9 @@ func generateQuery(structName string) []byte {
 	clientCode += fmt.Sprintf("\t\"context\"\n")
 	clientCode += fmt.Sprintf("\t\"cc/go-mongo/%s\"\n", strings.ToLower(structName))
 	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/bson\"\n")
+	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/mongo\"\n")
 	clientCode += fmt.Sprintf("\t\"go.mongodb.org/mongo-driver/mongo/options\"\n")
+
 	clientCode += fmt.Sprintf(")\n\n")
 
 	clientCode += fmt.Sprintf("type %sQuery struct {\n", structName)
@@ -271,6 +286,15 @@ func generateQuery(structName string) []byte {
 	clientCode += fmt.Sprintf("\t}\n")
 	clientCode += fmt.Sprintf("\treturn temp, nil\n")
 	clientCode += fmt.Sprintf("}\n")
+	clientCode += fmt.Sprintf("func (uq *%sQuery) First(ctx context.Context) (*%s, error) {\n"+
+		"\tdocument, err := uq.Limit(1).All(ctx)\n"+
+		"\tif err != nil {\n"+
+		"\t\treturn nil, err\n"+
+		"\t}\n"+
+		"\tif len(document) == 0 {\n"+
+		"\t\treturn nil, mongo.ErrNilDocument\n"+
+		"\t}\n"+
+		"\treturn document[0], err\n}", structName, structName)
 
 	return []byte(clientCode)
 
