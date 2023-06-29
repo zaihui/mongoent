@@ -36,15 +36,7 @@ func TestQueryUserInfo(t *testing.T) {
 	newClient := mongoschema.NewClient(mongoschema.Driver(*client))
 
 	all, err := newClient.User.SetDBName("my_mongo").Query().
-		Where(
-			// user.AgeEQ(int(2)),
-			user.UserNameRegex("c*"),
-			//user.AgeIn([]int{1, 5}...),
-		).Offset(0).
-		Limit(10).
-		Order(
-			mongoschema.Desc(user.AgeField),
-			mongoschema.Asc(user.UserNameField)).
+		Where(user.UserNameRegex("c*")).
 		All(ctx)
 	if err != nil {
 		log.Fatal(err)
