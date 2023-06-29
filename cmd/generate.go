@@ -321,7 +321,7 @@ func generateQuery(structName string, modPath string) []byte {
 	clientCode += "\t\treturn nil, err\n"
 	clientCode += "\t}\n"
 	clientCode += "\tdefer cur.Close(ctx)\n"
-	// todo:修改引用的包
+
 	clientCode += fmt.Sprintf("\ttemp := make([]*%s, 0)\n", structName)
 	clientCode += "\tfor cur.Next(ctx) {\n"
 	clientCode += fmt.Sprintf("\t\tvar u %s\n", structName)
@@ -359,6 +359,11 @@ func generateFindFunction(structName string, fields []FieldInfo) string {
 				function += getFindFunctionTemplate(structName, field, s)
 			}
 		}
+		if v, ok := mongoent.ComparisonInOperators[field.Type]; ok {
+			for _, s := range v {
+				function += getFindInFunctionTemplate(structName, field, s)
+			}
+		}
 	}
 	return function
 }
@@ -372,6 +377,20 @@ func getFindFunctionTemplate(structName string, field FieldInfo, op string) stri
 	if op == "" {
 		op = mongoent.Eq
 	}
+	builder.WriteString(fmt.Sprintf("\t\t\tValue: bson.M{\"%s\": v},\n", op))
+	builder.WriteString("\t\t})\n")
+	builder.WriteString("\t}\n")
+	builder.WriteString("}\n")
+
+	return builder.String()
+}
+
+func getFindInFunctionTemplate(structName string, field FieldInfo, op string) string {
+	builder := strings.Builder{}
+	builder.WriteString(fmt.Sprintf("func %s%s(v ...%s) %sPredicate {\n", field.Name, mongoent.OpSplit(op), field.Type, structName))
+	builder.WriteString("\treturn func(d *bson.D) {\n")
+	builder.WriteString("\t\t*d = append(*d, bson.E{\n")
+	builder.WriteString(fmt.Sprintf("\t\t\tKey:   %sField,\n", field.Name))
 	builder.WriteString(fmt.Sprintf("\t\t\tValue: bson.M{\"%s\": v},\n", op))
 	builder.WriteString("\t\t})\n")
 	builder.WriteString("\t}\n")

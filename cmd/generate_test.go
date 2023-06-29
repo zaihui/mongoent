@@ -39,15 +39,16 @@ func TestQueryUserInfo(t *testing.T) {
 		Where(
 			// user.AgeEQ(int(2)),
 			user.UserNameRegex("c*"),
+			//user.AgeIn([]int{1, 5}...),
 		).Offset(0).
 		Limit(10).
 		Order(
 			mongoschema.Desc(user.AgeField),
 			mongoschema.Asc(user.UserNameField)).
-		First(ctx)
+		All(ctx)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
-	fmt.Println(all)
+	fmt.Println(all[0], all[1])
 }

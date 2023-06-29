@@ -44,6 +44,24 @@ func UserNameRegex(v string) UserInfoPredicate {
 	}
 }
 
+func UserNameIN(v ...string) UserInfoPredicate {
+	return func(d *bson.D) {
+		*d = append(*d, bson.E{
+			Key:   UserNameField,
+			Value: bson.M{"$in": v},
+		})
+	}
+}
+
+func UserNameNIN(v ...string) UserInfoPredicate {
+	return func(d *bson.D) {
+		*d = append(*d, bson.E{
+			Key:   UserNameField,
+			Value: bson.M{"$nin": v},
+		})
+	}
+}
+
 func Age(v int) UserInfoPredicate {
 	return func(d *bson.D) {
 		*d = append(*d, bson.E{
@@ -103,6 +121,24 @@ func AgeLTE(v int) UserInfoPredicate {
 		*d = append(*d, bson.E{
 			Key:   AgeField,
 			Value: bson.M{"$lte": v},
+		})
+	}
+}
+
+func AgeIN(v ...int) UserInfoPredicate {
+	return func(d *bson.D) {
+		*d = append(*d, bson.E{
+			Key:   AgeField,
+			Value: bson.M{"$in": v},
+		})
+	}
+}
+
+func AgeNIN(v ...int) UserInfoPredicate {
+	return func(d *bson.D) {
+		*d = append(*d, bson.E{
+			Key:   AgeField,
+			Value: bson.M{"$nin": v},
 		})
 	}
 }
