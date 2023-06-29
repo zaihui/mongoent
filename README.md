@@ -108,12 +108,7 @@ if err != nil {
 Make sure you have Go programming language and related tools installed correctly.
 ### Installation
 
-1. To install the mongo-ent tool in a Go project that uses Go Modules (gomod):
-
-   ```sh
-   go install github.com/ent/migrate/cmd/migrate@latest
-   ```
-3. Install gofmt、goimports、gofumpt
+1.Install gofmt、goimports、gofumpt
    ```sh
    go install golang.org/x/tools/cmd/gofmt@latest
    go install golang.org/x/tools/cmd/goimports@latest
@@ -130,16 +125,16 @@ Make sure you have Go programming language and related tools installed correctly
 To generate the relevant code, simply run the following command:
 
 ```shell
-mongo-ent generate --schemaFile {$YourModelPath} --outputPath {$outputPath} --projectPath {$projectPath} --goModPath {$goModPath}
+go run -mod=mod github.com/zaihui/mongoent/cmd generate --schemaFile {$YourModelPath} --outputPath {$outputPath} --projectPath {$projectPath} --goModPath {$goModPath}
 ```
 
 --schemaFile:The schema corresponding to MongoDB is represented as a struct type.
 
 --outputPath：The generated code is typically placed in a directory specified by the project's configuration or convention. Please refer to your project's documentation or configuration files to determine the specific path where the code will be generated.
 
- --projectPath：project path
+--projectPath：project path
 
---goModPath: go mod path
+--goModPath:   go mod path
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
